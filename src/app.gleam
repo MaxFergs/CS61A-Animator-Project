@@ -53,6 +53,12 @@ const speed_min = -2.0
 
 const speed_max = 2.0
 
+// The second slider. A draw function of two parameters receives this as its
+// second argument. One full turn of a Whirl is the distance from 0 to 100.
+const spin_min = 0
+
+const spin_max = 100
+
 // ── Model ──────────────────────────────────────────────────────────────────────
 
 pub type Model {
@@ -66,6 +72,8 @@ pub type Model {
     shape_slider: Int,
     // Playback rate passed to render.set_speed.
     speed: Float,
+    // The Int passed to a two-argument draw as its second parameter.
+    spin: Int,
     // Every saved drawing, examples first, then ones the user created.
     drawings: List(#(String, String)),
     // The name of the drawing open in the editor.
@@ -85,6 +93,7 @@ pub type Msg {
   // Slider inputs. The payload is the control's string value.
   SetShapeSlider(String)
   SetSpeed(String)
+  SetSpin(String)
 
   // The drawing menu. NameSubmitted is the in-page name box.
   SelectDrawing(String)
@@ -107,6 +116,7 @@ pub fn init(_flags: Nil) -> #(Model, Effect(Msg)) {
       output: "",
       shape_slider: 0,
       speed: 1.0,
+      spin: 0,
       drawings: library.drawings,
       selected: library.selected,
       asking_name: False,
@@ -136,11 +146,15 @@ fn parse_rate(raw: String) -> Result(Float, Nil) {
 
 // Parse and evaluate a draw function at the given shape-slider value, returning
 // the rendered paths on success, or a human-readable message on failure.
-fn run_source(shape_slider: Int, source: String) -> Result(List(Path), String) {
+fn run_source(
+  shape_slider: Int,
+  spin: Int,
+  source: String,
+) -> Result(List(Path), String) {
   case parser.parse_program(source, builtins.global_frame()) {
     Error(msg) -> Error(msg)
     Ok(program) ->
-      drawing.try_draw(shape_slider, program)
+      drawing.try_draw_at(shape_slider, spin, program)
       // Convert Error(EvalError) to Error(String) with a useful error message.
       |> result.map_error(errors.error_message)
   }
@@ -157,7 +171,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     // so a reload keeps the drawing even when it does not yet run.
     SetCode(text) -> {
       let model = remember(model, text)
-      case run_source(model.shape_slider, text) {
+      case run_source(model.shape_slider, model.spin, text) {
         Ok(paths) -> present(model, paths, True)
         Error(msg) -> #(Model(..model, output: msg), effect.none())
       }
@@ -191,7 +205,21 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         Ok(n) -> {
           let n = int.clamp(n, shape_min, shape_max)
           let model = Model(..model, shape_slider: n)
-          case run_source(n, model.source) {
+          case run_source(n, model.spin, model.source) {
+            Ok(paths) -> present(model, paths, False)
+            Error(msg) -> #(Model(..model, output: msg), effect.none())
+          }
+        }
+      }
+
+    // Spin turns a Whirl in place. Like the shape slider, it does not replay.
+    SetSpin(raw) ->
+      case int.parse(raw) {
+        Error(_) -> #(model, effect.none())
+        Ok(n) -> {
+          let n = int.clamp(n, spin_min, spin_max)
+          let model = Model(..model, spin: n)
+          case run_source(model.shape_slider, n, model.source) {
             Ok(paths) -> present(model, paths, False)
             Error(msg) -> #(Model(..model, output: msg), effect.none())
           }
@@ -352,6 +380,7 @@ fn view_controls(model: Model) -> Element(Msg) {
       view_shape_slider(model),
       view_speed_slider(model),
     ]),
+    html.div([attr.class("playback-sliders")], [view_spin_slider(model)]),
   ])
 }
 
@@ -372,8 +401,10 @@ fn extension_note(name: String) -> String {
       "Stitch draws a shape, then returns the pen to its first point. A line goes out and comes home, and a curve closes into a loop."
     "loom" ->
       "The loom uses all three: Spiro for the curves, Ink for the shifting color, and Stitch to close them. Open spiro, ink, and stitch to see each piece alone."
+    "whirl" ->
+      "Whirl(center, petals, reach, spin) draws a rose. Shape changes how many petals it has. Spin turns the rose without replaying it."
     _ ->
-      "Spiro rolls a curve, Ink blends two colors along a stroke, and Stitch closes the shape. Open the spiro, ink, and stitch drawings to try each one."
+      "Spiro rolls a curve, Ink blends two colors, and Stitch closes the shape. Spin is a second slider. Open whirl to turn a rose with it."
   }
 }
 
@@ -426,6 +457,23 @@ fn view_shape_slider(model: Model) -> Element(Msg) {
         attr.attribute("data-test-id", "shape-slider"),
         event.on_input(SetShapeSlider),
       ]),
+  ])
+}
+
+fn view_spin_slider(model: Model) -> Element(Msg) {
+  html.label([attr.class("slider")], [
+    html.span([attr.class("slider-name")], [
+      html.text("Spin " <> int.to_string(model.spin)),
+    ]),
+    html.input([
+      attr.type_("range"),
+      attr.min(int.to_string(spin_min)),
+      attr.max(int.to_string(spin_max)),
+      attr.step("1"),
+      attr.value(int.to_string(model.spin)),
+      attr.attribute("data-test-id", "spin-slider"),
+      event.on_input(SetSpin),
+    ]),
   ])
 }
 

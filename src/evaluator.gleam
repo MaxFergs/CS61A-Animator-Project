@@ -33,6 +33,7 @@ pub const constructors: List(Constructor) = [
   #("Spiro", ["center", "fixed", "rolling", "pen", "turns"]),
   #("Stitch", ["shape"]),
   #("Ink", ["shape", "r0", "g0", "b0", "r1", "g1", "b1"]),
+  #("Whirl", ["center", "petals", "reach", "spin"]),
   #("Path", ["shape", "start", "end", "thickness"]),
 ]
 

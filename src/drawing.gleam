@@ -4,13 +4,16 @@
 //// The user's integers become the Float fields the geometry needs.
 
 import errors.{type EvalError, BadDrawing, PathLimit}
-import evaluator.{type GlobalFrame, type Value, VData, VInt, VList}
+import evaluator.{
+  type GlobalFrame, type Value, UserFn, VData, VFunc, VInt, VList,
+}
 import gleam/int
 import gleam/list
 import gleam/result
 import limits
+import mutable_dict
 import shape.{
-  type Path, type Point, type Shape, Ink, Line, Path, Point, Spiro, Stitch,
+  type Path, type Point, type Shape, Ink, Line, Path, Point, Spiro, Stitch, Whirl,
 }
 
 /// Call the program's draw function on shape_slider, returning its list of
@@ -19,7 +22,22 @@ pub fn try_draw(
   shape_slider: Int,
   global: GlobalFrame,
 ) -> Result(List(Path), EvalError) {
-  case evaluator.run("draw", [VInt(shape_slider)], global) {
+  try_draw_at(shape_slider, 0, global)
+}
+
+/// Draw at a shape-slider value and a spin-slider value. A draw function of
+/// one parameter receives only the shape slider, so older drawings ignore spin.
+/// A draw function of two parameters receives spin as the second argument.
+pub fn try_draw_at(
+  shape_slider: Int,
+  spin: Int,
+  global: GlobalFrame,
+) -> Result(List(Path), EvalError) {
+  let args = case wants_spin(global) {
+    True -> [VInt(shape_slider), VInt(spin)]
+    False -> [VInt(shape_slider)]
+  }
+  case evaluator.run("draw", args, global) {
     Ok(VList(items)) ->
       // The step allowance bounds what evaluation can build, but the
       // renderer redraws every path each frame, so a finished drawing is
@@ -100,7 +118,28 @@ fn to_shape(v: Value) -> Result(Shape, EvalError) {
     VData("Stitch", _) -> Error(BadDrawing("a Stitch needs one shape"))
     VData("Ink", _) ->
       Error(BadDrawing("an Ink needs a shape and six integers"))
+    VData(
+      "Whirl",
+      [center, VInt(petals), VInt(reach), VInt(spin)],
+    ) -> {
+      use c <- result.try(to_point(center))
+      Ok(Whirl(
+        c,
+        int.to_float(petals),
+        int.to_float(reach),
+        int.to_float(spin),
+      ))
+    }
+    VData("Whirl", _) ->
+      Error(BadDrawing("a Whirl needs a Point and three integers"))
     _ -> Error(BadDrawing("a Path's shape must be a recognized shape"))
+  }
+}
+
+fn wants_spin(global: GlobalFrame) -> Bool {
+  case mutable_dict.get(global, "draw") {
+    Ok(VFunc(UserFn(_, [_, _], _, _))) -> True
+    _ -> False
   }
 }
 

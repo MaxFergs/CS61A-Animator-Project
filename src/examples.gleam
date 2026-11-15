@@ -152,6 +152,40 @@ fn branch(p: Point, d: Point, level: Int, depth: Int) -> List(Path) {
 ",
   ),
   #(
+    "whirl",
+    "fn draw(shape_slider: Int, spin: Int) -> List(Path) {
+  // Whirl(center, petals, reach, spin) draws a rose.
+  // petals is how many loops. reach is the size.
+  // spin turns the whole rose. The Spin slider is this second argument.
+  // Dragging Spin turns the drawing without replaying it.
+  let petals = 3 + shape_slider / 20
+  let reach = 160 + shape_slider
+  [
+    Path(
+      Ink(Stitch(Whirl(Point(0, 0), petals, reach, spin)), 255, 170, 70, 90, 140, 230),
+      0,
+      70,
+      3,
+    ),
+    Path(
+      Ink(
+        Stitch(Whirl(Point(0, 0), petals + 2, reach / 2, 100 - spin)),
+        180,
+        220,
+        255,
+        255,
+        120,
+        160,
+      ),
+      8,
+      80,
+      2,
+    ),
+  ]
+}
+",
+  ),
+  #(
     "loom",
     "fn draw(shape_slider: Int) -> List(Path) {
   // All three pieces at once. Open spiro, ink, and stitch to see each one alone.

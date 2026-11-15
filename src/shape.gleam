@@ -19,6 +19,9 @@ pub type Shape {
   Stitch(shape: Shape)
   // Walk from the first RGB triple to the second and back while the shape is
   // revealed, so a closed curve meets in the first ink. Channels are 0 to 255.
+  // A rose of `petals` loops and radius `reach`. spin turns the whole rose:
+  // 0 and 100 are one full rotation apart.
+  Whirl(center: Point, petals: Float, reach: Float, spin: Float)
   Ink(
     shape: Shape,
     r0: Float,

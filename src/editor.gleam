@@ -68,6 +68,10 @@ type RefEntry {
 fn inputs() -> List(RefEntry) {
   [
     RefEntry("shape_slider: Int", "the shape slider value, in [0, 100]"),
+    RefEntry(
+      "spin: Int",
+      "the spin slider, in [0, 100], when draw takes a second argument",
+    ),
   ]
 }
 
@@ -91,6 +95,10 @@ fn functions() -> List(RefEntry) {
     RefEntry(
       "Stitch(shape)",
       "draw the shape, then close it by returning to the first sample",
+    ),
+    RefEntry(
+      "Whirl(center, petals, reach, spin)",
+      "a rose: petals is the number of loops, reach is the size, and spin turns it (0 and 100 are one full turn apart)",
     ),
     RefEntry(
       "Path(shape, start: Int, end: Int, thickness: Int)",

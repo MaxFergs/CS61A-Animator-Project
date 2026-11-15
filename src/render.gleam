@@ -9,7 +9,9 @@ import gleam/float
 import gleam/int
 import gleam/list
 import gleam/string
-import shape.{type Path, type Point, type Shape, Ink, Line, Point, Spiro, Stitch}
+import shape.{
+  type Path, type Point, type Shape, Ink, Line, Point, Spiro, Stitch, Whirl,
+}
 
 /// One path as canvas.mjs setDrawing consumes it (field by field): the
 /// polyline, stroke colour/width, and the start and end times (in tenths of a second)
@@ -88,6 +90,10 @@ fn trace(shape: Shape) -> #(List(Point), Paint) {
       let #(points, paint) = trace(inner)
       #(close(points), paint)
     }
+    Whirl(center, petals, reach, spin) -> #(
+      whirl_points(center, petals, reach, spin),
+      Solid,
+    )
     Ink(inner, r0, g0, b0, r1, g1, b1) -> {
       let #(points, _) = trace(inner)
       let points = case points {
@@ -208,6 +214,28 @@ fn byte(channel: Float) -> String {
 fn between(a: Point, b: Point, steps: Int) -> List(Point) {
   samples(steps, fn(u) {
     Point(a.x +. { b.x -. a.x } *. u, a.y +. { b.y -. a.y } *. u)
+  })
+}
+
+fn whirl_points(
+  center: Point,
+  petals: Float,
+  reach: Float,
+  spin: Float,
+) -> List(Point) {
+  let petals = case petals <=. 0.0 {
+    True -> 1.0
+    False -> petals
+  }
+  let steps = int.clamp(float.round(petals *. 48.0), 96, 360)
+  let phase = spin /. 100.0 *. tau
+  samples(steps, fn(u) {
+    let theta = u *. tau
+    let radius = reach *. cos(petals *. theta)
+    Point(
+      center.x +. radius *. cos(theta +. phase),
+      center.y +. radius *. sin(theta +. phase),
+    )
   })
 }
 
