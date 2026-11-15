@@ -347,11 +347,34 @@ fn view_controls(model: Model) -> Element(Msg) {
       ),
     ]),
     view_name_box(model),
+    view_extension_note(model),
     html.div([attr.class("playback-sliders")], [
       view_shape_slider(model),
       view_speed_slider(model),
     ]),
   ])
+}
+
+fn view_extension_note(model: Model) -> Element(Msg) {
+  html.p([attr.class("extension-note")], [
+    html.span([attr.class("extension-name")], [html.text("Extension")]),
+    html.text(" " <> extension_note(model.selected)),
+  ])
+}
+
+fn extension_note(name: String) -> String {
+  case name {
+    "spiro" ->
+      "Spiro(center, fixed, rolling, pen, turns) rolls one circle around another. A positive rolling radius stays inside. The Shape slider is the pen."
+    "ink" ->
+      "Ink paints with two colors. The six numbers are red, green, and blue for the start color, then the same three for the end. The stroke walks to the second color and back."
+    "stitch" ->
+      "Stitch draws a shape, then returns the pen to its first point. A line goes out and comes home, and a curve closes into a loop."
+    "loom" ->
+      "The loom uses all three: Spiro for the curves, Ink for the shifting color, and Stitch to close them. Open spiro, ink, and stitch to see each piece alone."
+    _ ->
+      "Spiro rolls a curve, Ink blends two colors along a stroke, and Stitch closes the shape. Open the spiro, ink, and stitch drawings to try each one."
+  }
 }
 
 fn view_name_box(model: Model) -> Element(Msg) {
