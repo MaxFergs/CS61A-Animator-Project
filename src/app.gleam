@@ -8,7 +8,6 @@ import errors
 import gleam/float
 import gleam/int
 import gleam/list
-import gleam/result
 import gleam/string
 import lustre
 import lustre/attribute as attr
@@ -53,12 +52,6 @@ const speed_min = -2.0
 
 const speed_max = 2.0
 
-// The second slider. A draw function of two parameters receives this as its
-// second argument. One full turn of a Whirl is the distance from 0 to 100.
-const spin_min = 0
-
-const spin_max = 100
-
 // ── Model ──────────────────────────────────────────────────────────────────────
 
 pub type Model {
@@ -72,8 +65,16 @@ pub type Model {
     shape_slider: Int,
     // Playback rate passed to render.set_speed.
     speed: Float,
-    // The Int passed to a two-argument draw as its second parameter.
-    spin: Int,
+    // Joystick aim. x is right, y is down, each from -1 to 1. The center is
+    // a straight-on view.
+    stick_x: Float,
+    stick_y: Float,
+    // The last drawing that evaluated, so dragging the joystick does not
+    // run the program again.
+    picture: List(Path),
+    // True when draw takes a second parameter. That number follows the
+    // joystick's horizontal position.
+    uses_spin: Bool,
     // Every saved drawing, examples first, then ones the user created.
     drawings: List(#(String, String)),
     // The name of the drawing open in the editor.
@@ -93,7 +94,7 @@ pub type Msg {
   // Slider inputs. The payload is the control's string value.
   SetShapeSlider(String)
   SetSpeed(String)
-  SetSpin(String)
+  SetStick(Float, Float)
 
   // The drawing menu. NameSubmitted is the in-page name box.
   SelectDrawing(String)
@@ -116,7 +117,10 @@ pub fn init(_flags: Nil) -> #(Model, Effect(Msg)) {
       output: "",
       shape_slider: 0,
       speed: 1.0,
-      spin: 0,
+      stick_x: 0.0,
+      stick_y: 0.0,
+      picture: [],
+      uses_spin: False,
       drawings: library.drawings,
       selected: library.selected,
       asking_name: False,
@@ -148,15 +152,17 @@ fn parse_rate(raw: String) -> Result(Float, Nil) {
 // the rendered paths on success, or a human-readable message on failure.
 fn run_source(
   shape_slider: Int,
-  spin: Int,
+  stick_x: Float,
   source: String,
-) -> Result(List(Path), String) {
+) -> Result(#(List(Path), Bool), String) {
+  let spin = float.round({ stick_x +. 1.0 } *. 50.0)
   case parser.parse_program(source, builtins.global_frame()) {
     Error(msg) -> Error(msg)
     Ok(program) ->
-      drawing.try_draw_at(shape_slider, spin, program)
-      // Convert Error(EvalError) to Error(String) with a useful error message.
-      |> result.map_error(errors.error_message)
+      case drawing.try_draw_at(shape_slider, spin, program) {
+        Ok(paths) -> Ok(#(paths, drawing.takes_spin(program)))
+        Error(err) -> Error(errors.error_message(err))
+      }
   }
 }
 
@@ -171,8 +177,9 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     // so a reload keeps the drawing even when it does not yet run.
     SetCode(text) -> {
       let model = remember(model, text)
-      case run_source(model.shape_slider, model.spin, text) {
-        Ok(paths) -> present(model, paths, True)
+      case run_source(model.shape_slider, model.stick_x, text) {
+        Ok(#(paths, uses_spin)) ->
+          present(Model(..model, uses_spin: uses_spin), paths, True)
         Error(msg) -> #(Model(..model, output: msg), effect.none())
       }
     }
@@ -205,26 +212,21 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         Ok(n) -> {
           let n = int.clamp(n, shape_min, shape_max)
           let model = Model(..model, shape_slider: n)
-          case run_source(n, model.spin, model.source) {
-            Ok(paths) -> present(model, paths, False)
+          case run_source(n, model.stick_x, model.source) {
+            Ok(#(paths, uses_spin)) ->
+              present(Model(..model, uses_spin: uses_spin), paths, False)
             Error(msg) -> #(Model(..model, output: msg), effect.none())
           }
         }
       }
 
-    // Spin turns a Whirl in place. Like the shape slider, it does not replay.
-    SetSpin(raw) ->
-      case int.parse(raw) {
-        Error(_) -> #(model, effect.none())
-        Ok(n) -> {
-          let n = int.clamp(n, spin_min, spin_max)
-          let model = Model(..model, spin: n)
-          case run_source(model.shape_slider, n, model.source) {
-            Ok(paths) -> present(model, paths, False)
-            Error(msg) -> #(Model(..model, output: msg), effect.none())
-          }
-        }
-      }
+    // The joystick aims the camera and leaves the clock where it is.
+    SetStick(x, y) ->
+      present(
+        Model(..model, stick_x: clamp_stick(x), stick_y: clamp_stick(y)),
+        model.picture,
+        False,
+      )
 
     SetSpeed(raw) ->
       case parse_rate(raw) {
@@ -313,11 +315,13 @@ fn present(
   restart: Bool,
 ) -> #(Model, Effect(Msg)) {
   let rendered =
-        list.flat_map(paths, fn(path) { render.render_path(path, path_color) })
+    list.flat_map(paths, fn(path) { render.render_path(path, path_color) })
+  let rendered = render.orbit(rendered, model.stick_x, model.stick_y)
   #(
-    Model(..model, output: ""),
-    effect.from(fn(_dispatch) {
+    Model(..model, output: "", picture: paths),
+    effect.from(fn(dispatch) {
       render.set_drawing(rendered)
+      bind_stick(fn(x, y) { dispatch(SetStick(x, y)) })
       case restart {
         True -> render.reset_clock()
         False -> Nil
@@ -325,6 +329,20 @@ fn present(
     }),
   )
 }
+
+fn clamp_stick(n: Float) -> Float {
+  case n <. -1.0 {
+    True -> -1.0
+    False ->
+      case n >. 1.0 {
+        True -> 1.0
+        False -> n
+      }
+  }
+}
+
+@external(javascript, "./stick_ffi.mjs", "bindStick")
+fn bind_stick(on_move: fn(Float, Float) -> Nil) -> Nil
 
 // ── View ──────────────────────────────────────────────────────────────────
 //
@@ -380,7 +398,7 @@ fn view_controls(model: Model) -> Element(Msg) {
       view_shape_slider(model),
       view_speed_slider(model),
     ]),
-    html.div([attr.class("playback-sliders")], [view_spin_slider(model)]),
+    view_orbit_stick(model),
   ])
 }
 
@@ -402,9 +420,9 @@ fn extension_note(name: String) -> String {
     "loom" ->
       "The loom uses all three: Spiro for the curves, Ink for the shifting color, and Stitch to close them. Open spiro, ink, and stitch to see each piece alone."
     "whirl" ->
-      "Whirl(center, petals, reach, spin) draws a rose. Shape changes how many petals it has. Spin turns the rose without replaying it."
+      "Whirl(center, petals, reach, spin) draws a rose. Shape changes how many petals it has. Drag the pad to look from the left, right, above, or below."
     _ ->
-      "Spiro rolls a curve, Ink blends two colors, and Stitch closes the shape. Spin is a second slider. Open whirl to turn a rose with it."
+      "Spiro rolls a curve, Ink blends two colors, and Stitch closes the shape. Drag the pad to look from the left, right, above, or below."
   }
 }
 
@@ -419,7 +437,7 @@ fn view_name_box(model: Model) -> Element(Msg) {
             attr.type_("text"),
             attr.name("name"),
             attr.class("drawing-name"),
-            attr.placeholder("Type loom, then Enter"),
+            attr.placeholder("Name, then Enter"),
             attr.autofocus(True),
           ]),
           html.button([attr.class("icon-btn"), attr.type_("submit")], [
@@ -460,21 +478,32 @@ fn view_shape_slider(model: Model) -> Element(Msg) {
   ])
 }
 
-fn view_spin_slider(model: Model) -> Element(Msg) {
-  html.label([attr.class("slider")], [
-    html.span([attr.class("slider-name")], [
-      html.text("Spin " <> int.to_string(model.spin)),
-    ]),
-    html.input([
-      attr.type_("range"),
-      attr.min(int.to_string(spin_min)),
-      attr.max(int.to_string(spin_max)),
-      attr.step("1"),
-      attr.value(int.to_string(model.spin)),
-      attr.attribute("data-test-id", "spin-slider"),
-      event.on_input(SetSpin),
-    ]),
+fn view_orbit_stick(model: Model) -> Element(Msg) {
+  html.div([attr.class("orbit-row")], [
+    html.span([attr.class("slider-name")], [html.text("Orbit")]),
+    html.div(
+      [
+        attr.class("orbit-stick"),
+        attr.attribute("data-test-id", "orbit-stick"),
+      ],
+      [
+        html.div(
+          [
+            attr.class("orbit-knob"),
+            attr.styles([
+              #("left", stick_percent(model.stick_x)),
+              #("top", stick_percent(model.stick_y)),
+            ]),
+          ],
+          [],
+        ),
+      ],
+    ),
   ])
+}
+
+fn stick_percent(n: Float) -> String {
+  float.to_string({ n +. 1.0 } *. 50.0) <> "%"
 }
 
 fn view_speed_slider(model: Model) -> Element(Msg) {

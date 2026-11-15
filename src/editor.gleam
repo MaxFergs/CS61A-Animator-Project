@@ -70,7 +70,7 @@ fn inputs() -> List(RefEntry) {
     RefEntry("shape_slider: Int", "the shape slider value, in [0, 100]"),
     RefEntry(
       "spin: Int",
-      "the spin slider, in [0, 100], when draw takes a second argument",
+      "follows the orbit pad left and right, from 0 to 100, when draw takes a second argument",
     ),
   ]
 }

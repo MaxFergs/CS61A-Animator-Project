@@ -68,6 +68,56 @@ pub fn reset_clock() -> Nil
 /// One user path becomes the ribbons the canvas reveals. A plain line is a
 /// single ribbon. A loom, a stitch, or an ink blend is several, spread across
 /// the path's start and end times.
+// How far the camera sits from the page. The stick aims it: x is left and
+// right, y is up and down. Each axis runs from -1 to 1.
+const orbit_focal = 1100.0
+
+/// Aim the camera with a joystick. (0, 0) looks straight at the page. Positive
+/// x looks from the right, and negative y looks from above. Near parts grow.
+pub fn orbit(
+  paths: List(RenderPath),
+  stick_x: Float,
+  stick_y: Float,
+) -> List(RenderPath) {
+  let yaw = stick_x *. 1.25
+  let pitch = 0.0 -. stick_y *. 1.05
+  list.map(paths, fn(path) { project_path(path, yaw, pitch) })
+}
+
+fn project_path(path: RenderPath, yaw: Float, pitch: Float) -> RenderPath {
+  let projected =
+    list.map(path.points, fn(point) { project(point, yaw, pitch) })
+  let points = list.map(projected, fn(placed) { placed.0 })
+  let scale = case projected {
+    [#(_, near), ..] -> near
+    _ -> 1.0
+  }
+  RenderPath(
+    points: points,
+    thickness: path.thickness *. scale,
+    color: path.color,
+    start: path.start,
+    end: path.end,
+  )
+}
+
+fn project(point: Point, yaw: Float, pitch: Float) -> #(Point, Float) {
+  let x = point.x
+  let y = 0.0 -. point.y
+  let z = 0.0
+  let y1 = y *. cos(pitch) -. z *. sin(pitch)
+  let z1 = y *. sin(pitch) +. z *. cos(pitch)
+  let x2 = x *. cos(yaw) -. z1 *. sin(yaw)
+  let z2 = x *. sin(yaw) +. z1 *. cos(yaw)
+  let depth = orbit_focal +. z2
+  let depth = case depth <. 220.0 {
+    True -> 220.0
+    False -> depth
+  }
+  let scale = orbit_focal /. depth
+  #(Point(x2 *. scale, 0.0 -. y1 *. scale), scale)
+}
+
 pub fn render_path(path: Path, color: String) -> List(RenderPath) {
   let #(points, paint) = trace(path.shape)
   case points, paint {

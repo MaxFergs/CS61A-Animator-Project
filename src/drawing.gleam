@@ -136,6 +136,12 @@ fn to_shape(v: Value) -> Result(Shape, EvalError) {
   }
 }
 
+/// True when draw takes two parameters, so the spin slider is a number in the
+/// program rather than a turn applied to the finished picture.
+pub fn takes_spin(global: GlobalFrame) -> Bool {
+  wants_spin(global)
+}
+
 fn wants_spin(global: GlobalFrame) -> Bool {
   case mutable_dict.get(global, "draw") {
     Ok(VFunc(UserFn(_, [_, _], _, _))) -> True
