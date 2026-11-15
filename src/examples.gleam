@@ -94,8 +94,67 @@ fn branch(p: Point, d: Point, level: Int, depth: Int) -> List(Path) {
 ",
   ),
   #(
+    "spiro",
+    "fn draw(shape_slider: Int) -> List(Path) {
+  // Spiro(center, fixed, rolling, pen, turns)
+  // fixed is the circle that stays still. rolling is the circle that moves.
+  // A positive rolling radius travels inside that fixed circle.
+  // pen is how far the nib sits from the moving circle, and the Shape slider
+  // changes it. turns is how many times the moving circle goes around.
+  let pen = 40 + shape_slider
+  [
+    Path(Spiro(Point(0, 0), 180, 72, pen, 2), 0, 60, 4),
+  ]
+}
+",
+  ),
+  #(
+    "ink",
+    "fn draw(shape_slider: Int) -> List(Path) {
+  // Ink(shape, r0, g0, b0, r1, g1, b1)
+  // The first three numbers are red, green, and blue for the start color.
+  // The last three are the end color. Each number runs from 0 to 255.
+  // The stroke walks to the end color and back, and the width pulses.
+  let reach = 220 + shape_slider
+  [
+    Path(
+      Ink(Line(Point(0 - reach, 0), Point(reach, 0)), 255, 90, 40, 50, 130, 255),
+      0,
+      40,
+      10,
+    ),
+    Path(Ink(Spiro(Point(0, 0), 1, 0, 160, 1), 255, 220, 90, 70, 190, 150), 15, 55, 6),
+  ]
+}
+",
+  ),
+  #(
+    "stitch",
+    "fn draw(shape_slider: Int) -> List(Path) {
+  // Stitch(shape) draws the shape, then sends the pen back to its first point.
+  // The line goes out and comes home. The curve is sealed into a loop.
+  let pen = 30 + shape_slider
+  [
+    Path(
+      Ink(Stitch(Line(Point(0, 0), Point(280, 0 - 80))), 255, 180, 70, 80, 140, 230),
+      0,
+      30,
+      8,
+    ),
+    Path(
+      Ink(Stitch(Spiro(Point(0, 0), 150, 60, pen, 2)), 230, 120, 180, 120, 200, 255),
+      10,
+      70,
+      4,
+    ),
+  ]
+}
+",
+  ),
+  #(
     "loom",
     "fn draw(shape_slider: Int) -> List(Path) {
+  // All three pieces at once. Open spiro, ink, and stitch to see each one alone.
   let pen = 36 + shape_slider
   [
     hoop(),

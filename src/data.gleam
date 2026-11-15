@@ -23,11 +23,31 @@ pub type Library {
 /// Seeding also writes those examples, so the next load finds them.
 pub fn load() -> Library {
   case read_saved() {
-    Ok(library) -> library
+    Ok(library) -> add_missing_examples(library)
     Error(_) -> {
       let selected = first_name(examples.all)
       save_index(examples.all, selected)
       Library(drawings: examples.all, selected: selected)
+    }
+  }
+}
+
+// A library saved before a new example existed would otherwise never show it.
+// Drawings the user already has keep their saved source.
+fn add_missing_examples(library: Library) -> Library {
+  let extra =
+    list.filter(examples.all, fn(drawing) {
+      case list.key_find(library.drawings, drawing.0) {
+        Ok(_) -> False
+        Error(_) -> True
+      }
+    })
+  case extra {
+    [] -> library
+    _ -> {
+      let drawings = list.append(library.drawings, extra)
+      save_index(drawings, library.selected)
+      Library(drawings: drawings, selected: library.selected)
     }
   }
 }
